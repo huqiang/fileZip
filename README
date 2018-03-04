@@ -1,0 +1,29 @@
+# FileZip
+## Description
+## How to run
+## Notes
+* The source code is formated by [google java format](https://github.com/google/google-java-format)   
+* Initial design of this program is:  
+```
+.
+├── in
+│   ├── fileA
+│   └── fileB
+└── out
+    ├── fileA.zip
+    ├── fileA_1.zip
+    └── fileB.zip
+```
+
+While the correct implementation should be:  
+
+```
+.
+├── in
+│   ├── fileA
+│   └── fileB
+└── out
+    ├── zip.zip
+    ├── zip_1.zip
+    └── zip_2.zip
+```
