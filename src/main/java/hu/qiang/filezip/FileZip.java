@@ -16,113 +16,138 @@ import org.slf4j.LoggerFactory;
 
 /** @author huqiang */
 public class FileZip {
-  private static final int BUFFER_SIZE = 1048576; //1MB
-  private static final Logger logger = LoggerFactory.getLogger(FileZip.class);
+	private static final int BUFFER_SIZE = 1048576; // 1MB
+	private static final Logger logger = LoggerFactory.getLogger(FileZip.class);
+	private static final String BIG_ZIP_NAME = "big.zip";
 
-  public void compressDirectory(String inDirectory, String outDirectory, int maxSize) {
-    logger.info(
-        "compressDirectory: inDirectory = {}, outDirectory = {}, maxSize = {}",
-        inDirectory,
-        outDirectory,
-        maxSize);
-    Queue<File> directoryQueue = new LinkedList<>();
-    directoryQueue.add(new File(inDirectory));
-    while (!directoryQueue.isEmpty()) {
-      File currentDirectory = directoryQueue.poll();
-      String currentOutDirectory =
-          this.formCurrentOutDirectory(currentDirectory, inDirectory, outDirectory);
-      this.compressDirectory(currentDirectory, currentOutDirectory, maxSize, directoryQueue);
-    }
-  }
+	public void compressDirectory(String inDirectory, String outDirectory, int maxSize) {
+		logger.info("compressDirectory: inDirectory = {}, outDirectory = {}, maxSize = {}", inDirectory, outDirectory,
+				maxSize);
+		File inDirectoryFile = new File(inDirectory);
+		File outDirectoryFile = new File(outDirectory);
+		if (!outDirectoryFile.exists()) {
+			outDirectoryFile.mkdir();
+		}
+		Queue<File> directoryQueue = new LinkedList<>();
+		directoryQueue.add(inDirectoryFile);
+		String zipFileName = this.formZipFilePath(outDirectory, BIG_ZIP_NAME);
+		File zipFile = new File(zipFileName);
 
-  public void decompressDirectory(String inDirectory, String outDirectory) {}
+		try (FileOutputStream fileOutStream = new FileOutputStream(zipFile);
+				ZipOutputStream zipOutStream = new ZipOutputStream(fileOutStream);) {
+			while (!directoryQueue.isEmpty()) {
+				File currentDirectory = directoryQueue.poll();
+				this.compressDirectory(inDirectory, currentDirectory, zipOutStream, directoryQueue);
+			}
+			this.splitFile(zipFile, maxSize);
+		} catch (FileNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 
-  private void compressFile(File inFile, String outDirectory, int maxSize) {
-    logger.info(
-        "compressFile: inFile = {}, outDirectory = {}, maxSize = {}",
-        inFile.getAbsolutePath(),
-        outDirectory,
-        maxSize);
+	}
 
-    if (!outDirectory.endsWith(File.separator)) {
-      logger.debug("Appending seperator to outDirectory");
-      outDirectory += File.separator;
-    }
-    int maxByteSize = maxSize * 1024 * 1024;
-    long currentSize = 0;
-    int zipSplitCount = 0;
-    byte[] fileRAW = new byte[BUFFER_SIZE];
-    String zipFileName = inFile.getName() + ".zip";
-    ZipOutputStream zipOutStream = null;
-    ByteArrayOutputStream byteArrayOutStream = new ByteArrayOutputStream(BUFFER_SIZE);
-    ZipOutputStream sizeCalOutStream = new ZipOutputStream(byteArrayOutStream);
-    FileInputStream inFileStream = null;
-    try {
-      File zipFile = new File(outDirectory + zipFileName);
-      zipOutStream = new ZipOutputStream(new FileOutputStream(outDirectory + zipFileName));
-      inFileStream = new FileInputStream(inFile);
-      ZipEntry zipEntry;
-      zipEntry = new ZipEntry(inFile.getName());
-      zipOutStream.putNextEntry(zipEntry);
-      sizeCalOutStream.putNextEntry(zipEntry);
+	public void decompressDirectory(String inDirectory, String outDirectory) {
+	}
 
-      int count;
-      while ((count = inFileStream.read(fileRAW, 0, BUFFER_SIZE)) != -1) {
-        byteArrayOutStream.reset();
-        sizeCalOutStream.write(fileRAW, 0, count);
-        int incrementalSize = byteArrayOutStream.size();
-        logger.debug("incrementalSize: {}", incrementalSize);
-        zipOutStream.write(fileRAW, 0, count);
-        logger.debug("Current zipFile size is: {}", zipFile.length());
-        if ((currentSize + incrementalSize)>= maxByteSize) {
-          logger.info("currentSize: {} is larger than maxByteSize: {}", currentSize, maxByteSize);
-          zipSplitCount++;
-          zipOutStream.close();
-          zipOutStream =
-              new ZipOutputStream(
-                  new FileOutputStream(
-                      outDirectory + zipFileName.replace(".zip", "_" + zipSplitCount + ".zip")));
-          currentSize = 0;
-        }
-        currentSize += incrementalSize;
-        logger.debug("currentSize: {}", currentSize);
-        logger.debug("size diff: {}", zipFile.length() - currentSize);
-      }
-      inFileStream.close();
-      zipOutStream.closeEntry();
+	private void compressFile(String inDir, File inFile, ZipOutputStream zipOutStream)
+			throws FileNotFoundException, IOException {
+		logger.info("compressFile: inDir={}, inFile = {}, maxSize = {}", inDir, inFile.getAbsolutePath());
 
-      zipOutStream.close();
-    } catch (FileNotFoundException e) {
-      e.printStackTrace();
-    } catch (IOException e) {
-      e.printStackTrace();
-    } finally {
-      try {
-        if (zipOutStream != null) zipOutStream.close();
-        if (inFileStream != null) inFileStream.close();
-      } catch (IOException e) {
-        // TODO Auto-generated catch block
-        e.printStackTrace();
-      }
-    }
-  }
+		byte[] fileRAW = new byte[BUFFER_SIZE];
+		try (FileInputStream inFileStream = new FileInputStream(inFile)) { // Auto closed
+			ZipEntry zipEntry;
+			zipEntry = new ZipEntry(inFile.getAbsolutePath().replaceFirst(inDir, ""));
+			logger.debug(zipEntry.getName());
+			zipOutStream.putNextEntry(zipEntry);
+			int count;
+			while ((count = inFileStream.read(fileRAW, 0, BUFFER_SIZE)) != -1) {
+				zipOutStream.write(fileRAW, 0, count);
+			}
+			zipOutStream.closeEntry();
+		}
+	}
 
-  private void decompressFile(File inFile, String outDirectory) {}
+	private void decompressFile(File inFile, String outDirectory) {
+	}
 
-  private void compressDirectory(
-      File currentDirectory, String currentOutDirectory, int maxSize, Queue<File> directoryQueue) {
-    File currentOutDir = new File(currentOutDirectory);
-    currentOutDir.mkdir();
-    for (File f : currentDirectory.listFiles()) {
-      if (f.isDirectory()) {
-        directoryQueue.add(f);
-      } else {
-        compressFile(f, currentOutDirectory, maxSize);
-      }
-    }
-  }
+	private void compressDirectory(String inDir, File currentDirectory, ZipOutputStream zipOutStream,
+			Queue<File> directoryQueue) throws FileNotFoundException, IOException {
+		File zippedFile = new File("/Users/huqiang/Downloads/testFileZip/out/big.zip");
+		logger.debug("Zip file size before adding directory: {}", zippedFile.length());
+		for (File f : currentDirectory.listFiles()) {
+			if (f.isDirectory()) {
+				directoryQueue.add(f);
+			} else {
+				compressFile(new File(inDir).getAbsolutePath(), f, zipOutStream);
+				logger.debug("Zip file size after adding {}: {}", f.getAbsolutePath(), zippedFile.length());
+			}
+		}
+	}
 
-  private String formCurrentOutDirectory(File dir, String inDirectory, String outDirectory) {
-    return dir.getPath().replaceFirst(inDirectory, outDirectory);
-  }
+	private void splitFile(File file, int maxSize) throws FileNotFoundException {
+		logger.info("Splitting {} with size {}MB to with part size: {}MB", file.getName(), file.length() / 1024 / 1024,
+				maxSize);
+		if (maxSize <= 0) {
+			maxSize = 1;
+		}
+		int maxByteSize = maxSize * 1024 * 1024;
+		logger.info("Splitting to {} parts", (file.length() / maxByteSize) + 1);
+		if (file.length() <= maxByteSize) {
+			return;
+		}
+
+		if (!file.isFile()) {
+			throw new FileNotFoundException("file not exists" + file.getAbsolutePath());
+		}
+		String filename = file.getAbsolutePath();
+
+		FileOutputStream fos = null;
+		try (FileInputStream fis = new FileInputStream(file);) {
+			byte[] buf = new byte[BUFFER_SIZE];
+			int readsize = 0;
+			int pos = 0;
+			int splitCount = 0;
+			File fileout = new File(filename + ".p" + splitCount);
+			fos = new FileOutputStream(fileout);
+			while ((readsize = fis.read(buf, 0, BUFFER_SIZE)) > 0) {
+				if (pos + readsize > maxByteSize) {
+					fos.close();
+					fileout = new File(filename + ".p" + (++splitCount));
+					fos = new FileOutputStream(fileout);
+					pos = 0;
+				}
+				fos.write(buf, 0, readsize);
+				fos.flush();
+				pos += readsize;
+			}
+//			file.delete();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} finally {
+			try {
+				if (fos != null) {
+					fos.close();
+				}
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+	}
+
+	private String formZipFilePath(String dir, String name) {
+		File dirFile = new File(dir);
+		if (!dirFile.exists()) {
+			dirFile.mkdirs();
+		}
+		return String.format("%s%s%s", dirFile.getAbsolutePath(), File.separator, name);
+	}
 }
