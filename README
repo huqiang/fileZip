@@ -2,7 +2,7 @@
 ## Description
 ## How to run
 ## Notes
-* The source code is formated by [google java format](https://github.com/google/google-java-format)   
+* Symbolic Links are not supported.  
 * Initial design of this program is:  
 ```
 .

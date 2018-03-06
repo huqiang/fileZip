@@ -4,6 +4,7 @@
 package hu.qiang.filezip;
 
 import java.io.File;
+import java.io.IOException;
 
 import org.junit.Ignore;
 import org.junit.Test;
@@ -26,7 +27,7 @@ public class FileZipTest {
 	public void testCompressDirectoryWithSplit() throws Exception {
 		FileZip fz = new FileZip();
 		String outDirectory = "/Users/huqiang/Downloads/testFileZip/out";
-		fz.compressDirectory("/Users/huqiang/Downloads/testFileZip/in", outDirectory, 3);
+		fz.compressDirectory("/Users/huqiang/Downloads/testFileZip/in", outDirectory, 2);
 		File outDir = new File(outDirectory);
 		// assertTrue("There should be 2 splits", outDir.listFiles().length == 2);
 		// fz.splitFile(new File("/Users/huqiang/Downloads/testFileZip/out/big.zip"),
@@ -34,10 +35,9 @@ public class FileZipTest {
 	}
 
 	@Test
-	// @Ignore
-	public void testCombineFile() {
+//	@Ignore
+	public void testDecompressDirectory() throws IOException {
 		FileZip fz = new FileZip();
-		File zipFile = new File("/Users/huqiang/Downloads/testFileZip/out/big.zip");
-		fz.combineFile(zipFile);
+		fz.decompressDirectory("/Users/huqiang/Downloads/testFileZip/out", "/Users/huqiang/Downloads/testFileZip/decom");
 	}
 }
