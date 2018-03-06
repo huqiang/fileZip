@@ -39,7 +39,6 @@ public class FileZip {
 				File currentDirectory = directoryQueue.poll();
 				this.compressDirectory(inDirectory, currentDirectory, zipOutStream, directoryQueue);
 			}
-			this.splitFile(zipFile, maxSize);
 		} catch (FileNotFoundException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -47,6 +46,13 @@ public class FileZip {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		logger.debug("Final zip file size: {}", zipFile.length());
+		try {
+			this.splitFile(zipFile, maxSize);
+		} catch (FileNotFoundException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
@@ -91,17 +97,15 @@ public class FileZip {
 		}
 	}
 
-	private void splitFile(File file, int maxSize) throws FileNotFoundException {
+	public void splitFile(File file, int maxSize) throws FileNotFoundException {
 		logger.info("Splitting {} with size {}MB to with part size: {}MB", file.getName(), file.length() / 1024 / 1024,
 				maxSize);
 		if (maxSize <= 0) {
 			maxSize = 1;
 		}
 		int maxByteSize = maxSize * 1024 * 1024;
+		logger.debug("File size: {}", file.length());
 		logger.info("Splitting to {} parts", (file.length() / maxByteSize) + 1);
-		if (file.length() <= maxByteSize) {
-			return;
-		}
 
 		if (!file.isFile()) {
 			throw new FileNotFoundException("file not exists" + file.getAbsolutePath());
@@ -124,10 +128,11 @@ public class FileZip {
 					pos = 0;
 				}
 				fos.write(buf, 0, readsize);
+				// logger.debug("Wrote {} bytes", readsize);
 				fos.flush();
 				pos += readsize;
 			}
-//			file.delete();
+			file.delete();
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -140,6 +145,38 @@ public class FileZip {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
+		}
+	}
+
+	public void combineFile(File file) {
+		String filename = file.getAbsolutePath();
+		File fileout = new File(filename);
+
+		try (FileOutputStream fos = new FileOutputStream(fileout);) {
+			int splitCount = 0;
+			File filein = new File(filename + ".p" + splitCount);
+			FileInputStream fis = null; // = new FileInputStream(filein);
+			byte[] buf = new byte[BUFFER_SIZE];
+			while (filein.isFile()) {
+				logger.debug("Reading file: {}", filein.getName());
+				fis = new FileInputStream(filein);
+				int readsize = 0;
+				while ((readsize = fis.read(buf, 0, BUFFER_SIZE)) > 0) {
+					logger.debug("Write {} bytes.", readsize);
+					fos.write(buf, 0, readsize);
+					fos.flush();
+				}
+				if (fis != null) {
+					fis.close();
+				}
+				filein = new File(filename + ".p" + (++splitCount));
+			}
+		} catch (FileNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
 		}
 	}
 
