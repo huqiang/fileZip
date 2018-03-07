@@ -1,8 +1,5 @@
 package hu.qiang.filezip;
 
-import java.io.IOException;
-import java.security.InvalidParameterException;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,21 +10,42 @@ public class App {
 	private static final Logger logger = LoggerFactory.getLogger(App.class);
 
 	public static void main(String[] args) {
+		if (args.length == 0 || (!args[0].equals("compression") && !args[0].equals("decompression"))) {
+			help();
+			return;
+		}
 		FileZip fz = new FileZip();
+		fz.setCompressLevel(9);
 		if (args[0].equals("compression")) {
 			if (args.length != 4) {
-				throw new InvalidParameterException("This program takes 4 inputs.");
+				help();
 			}
-			fz.compressDirectory(args[1], args[2], Integer.valueOf(args[3]));
+			int size;
+			try {
+				size = Integer.valueOf(args[3]);
+			} catch (NumberFormatException e) {
+				logger.error("Invalid size: " + args[3], e);
+				throw e;
+			}
+			fz.compressDirectory(args[1], args[2], size);
 		} else if (args[0].equals("decompression")) {
 			if (args.length != 3) {
-				throw new InvalidParameterException("This program takes 3 inputs.");
+				help();
 			}
-			try {
-				fz.decompressDirectory(args[1], args[2]);
-			} catch (IOException e) {
-				logger.error("Fail to decompress directory: " + args[0] + " - " + e.getMessage(), e);
-			}
+			fz.decompressDirectory(args[1], args[2]);
 		}
+	}
+
+	private static void help() {
+		//@formatter:off
+		String commandHelp = new StringBuilder()
+				.append("Command:\n")
+				.append("To compress directory:\n")
+				.append("    fileZip compression in_folder out_folder max_size\n")
+				.append("To decompress directory:\n")
+				.append("    fileZip decompression in_folder out_folder")
+				.toString();
+		//@formatter:on
+		System.out.println(commandHelp);
 	}
 }

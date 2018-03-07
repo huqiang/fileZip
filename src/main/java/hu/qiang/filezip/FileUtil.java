@@ -18,9 +18,9 @@ import org.slf4j.LoggerFactory;
  *
  */
 public class FileUtil {
-	private static final int BUFFER_SIZE = 1048576; // 1MB
+	private static final int BUFFER_SIZE = 16*1024; // 16K
 	private static final Logger logger = LoggerFactory.getLogger(FileUtil.class);
-
+	
 	
 	/**
 	 * Method to split given file to parts with size <= given maxSize

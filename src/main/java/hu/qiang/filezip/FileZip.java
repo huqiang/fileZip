@@ -3,13 +3,14 @@ package hu.qiang.filezip;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.Files;
 import java.util.LinkedList;
 import java.util.Queue;
+import java.util.zip.Deflater;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipInputStream;
@@ -20,9 +21,11 @@ import org.slf4j.LoggerFactory;
 
 /** @author huqiang */
 public class FileZip {
-	private static final int BUFFER_SIZE = 1048576; // 1MB
+	private static final int BUFFER_SIZE = 16*1024; // 16K
 	private static final Logger logger = LoggerFactory.getLogger(FileZip.class);
-
+	private boolean deleteCombinedFile = false;  //To leave the combined zip file, for investigation;
+	private int compressMethod = ZipOutputStream.DEFLATED; //Default compressMethod;
+	private int compressLevel = Deflater.DEFAULT_COMPRESSION; //Default compression level;
 	/**
 	 * To compress the inDirectory to set of zip with size <= maxSize, to outDirectory
 	 * @param inDirectory
@@ -33,17 +36,33 @@ public class FileZip {
 		logger.info("compressDirectory: inDirectory = {}, outDirectory = {}, maxSize = {}", inDirectory, outDirectory,
 				maxSize);
 		File inDirectoryFile = new File(inDirectory);
+		if (!inDirectoryFile.exists()) {
+			logger.error("Directory not found: {}", inDirectoryFile.getAbsolutePath() );
+			return;
+		}
 		File outDirectoryFile = new File(outDirectory);
-		if (!outDirectoryFile.exists()) {
-			outDirectoryFile.mkdir();
+		try {
+			createFolderIfNotExist(outDirectoryFile);
+		} catch (Exception e) {
+			logger.error(e.getMessage(), e);
 		}
 		Queue<File> directoryQueue = new LinkedList<>();
 		directoryQueue.add(inDirectoryFile);
-		String zipFileName = this.formZipFilePath(outDirectory, inDirectoryFile.getName());
+		String zipFileName;
+		try {
+			zipFileName = this.formZipFilePath(outDirectory, inDirectoryFile.getName());
+		} catch (Exception e) {
+			logger.error("Failed to get output zip name: " + e.getMessage(), e);
+			return;
+		}
 		File zipFile = new File(zipFileName);
 
 		try (FileOutputStream fileOutStream = new FileOutputStream(zipFile);
 				ZipOutputStream zipOutStream = new ZipOutputStream(fileOutStream);) {
+			
+			zipOutStream.setMethod(this.compressMethod);
+			zipOutStream.setLevel(this.compressLevel);
+			
 			while (!directoryQueue.isEmpty()) {
 				File currentDirectory = directoryQueue.poll();
 				this.compressDirectory(inDirectory, currentDirectory, zipOutStream, directoryQueue);
@@ -65,24 +84,55 @@ public class FileZip {
 	 * @param outDirectory
 	 * @throws IOException
 	 */
-	public void decompressDirectory(String inDirectory, String outDirectory) throws IOException {
+	public void decompressDirectory(String inDirectory, String outDirectory) {
 		logger.info("decompressDirectory: {}, {}", inDirectory, outDirectory);
 		File inDirFile = new File(inDirectory);
 		File[] parts = inDirFile.listFiles((dir, name) -> name.matches(".*\\.zip\\.p\\d$"));
 		if (parts.length == 0) {
-			throw new FileNotFoundException("No parts file foud in dir: " + inDirectory);
+			logger.error("No parts file foud in dir: {}", inDirectory);
 		}
 		logger.info("{} part files found.", parts.length);
 		String zipFileName = getZipFileName(parts[0]);
-		File zipFile;
+		File zipFile = null;
 		try {
 			FileUtil fu = new FileUtil();
 			zipFile = fu.combineFile(new File(zipFileName));
 		} catch (IOException e) {
 			logger.error("Fail to combile zip file: " + zipFileName+ "-" + e.getMessage(), e);
-			throw e;
 		}
-		this.decompressFile(zipFile, outDirectory);
+		try {
+			if (zipFile == null) {
+				logger.error("Fail to find zip file: {}", zipFileName);
+				return;
+			}
+			this.decompressFile(zipFile, outDirectory);
+			if (this.deleteCombinedFile) {
+				Files.delete(zipFile.toPath());
+			}
+		} catch (Exception e) {
+			logger.error("Fail to decpmpress zip file: " + zipFileName+ "-" + e.getMessage(), e);
+		}
+	}
+	
+	/**
+	 * @param del
+	 */
+	public void setDeleteCombinedFile(boolean del) {
+		this.deleteCombinedFile = del;
+	}
+
+	/**
+	 * @param compressMethod
+	 */
+	public void setCompressMethod(int compressMethod) {
+		this.compressMethod = compressMethod;
+	}
+
+	/**
+	 * @param compressLevel
+	 */
+	public void setCompressLevel(int compressLevel) {
+		this.compressLevel = compressLevel;
 	}
 
 	/**
@@ -98,13 +148,11 @@ public class FileZip {
 	 * Method to decompress zip file to given directory
 	 * @param inFile: the zip file to be decompressed
 	 * @param outDirectory: the decompressed to put
-	 * @throws IOException
+	 * @throws Exception 
 	 */
-	private void decompressFile(File inFile, String outDirectory) throws IOException {
+	private void decompressFile(File inFile, String outDirectory) throws Exception {
 		File outDirFile = new File(outDirectory);
-		if (!outDirFile.exists()) {
-			outDirFile.mkdirs();
-		}
+		createFolderIfNotExist(outDirFile);
 
 		byte[] buff = new byte[BUFFER_SIZE];
 		ZipEntry entry = null;
@@ -113,9 +161,8 @@ public class FileZip {
 			File outFile = null;
 			while ((entry = zipInput.getNextEntry()) != null) {
 				outFile = new File(outDirFile.getAbsolutePath() + File.separator + entry.getName());
-				if (!outFile.getParentFile().exists()) {
-					outFile.getParentFile().mkdirs();
-				}
+				createFolderIfNotExist(outFile.getParentFile());
+				
 				if (!outFile.exists()) {
 					outFile.createNewFile();
 				}
@@ -179,12 +226,31 @@ public class FileZip {
 	 * @param dir: the directory to put zip file
 	 * @param name: name of the zip file, without extension
 	 * @return the absolute string path of the zip file
+	 * @throws Exception 
 	 */
-	private String formZipFilePath(String dir, String name) {
+	private String formZipFilePath(String dir, String name) throws Exception {
 		File dirFile = new File(dir);
-		if (!dirFile.exists()) {
-			dirFile.mkdirs();
-		}
+		createFolderIfNotExist(dirFile);
 		return String.format("%s%s%s.zip", dirFile.getAbsolutePath(), File.separator, name);
+	}
+	
+
+	/**
+	 * @param folder
+	 * @throws Exception
+	 */
+	private void createFolderIfNotExist(File folder) throws Exception {
+		if (!folder.exists()) {
+			boolean isFolderMade = false;
+			try {
+				isFolderMade = folder.mkdirs();
+			} catch (Exception e) {
+				logger.error("Failed to make folder: " + folder.getAbsolutePath() + "-" + e.getMessage(), e);
+				throw e;
+			}
+			if (!isFolderMade) {
+				throw new Exception("Failed to make folder: " + folder.getAbsolutePath());
+			}
+		}
 	}
 }
